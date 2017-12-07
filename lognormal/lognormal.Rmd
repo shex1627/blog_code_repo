@@ -1,0 +1,217 @@
+---
+title: "R Notebook"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+```{r}
+knitr::opts_chunk$set(echo=F)
+```
+
+
+```{r libraries, include=FALSE}
+library(tidyverse)
+library(stringr)
+library(lubridate)
+```
+
+## Simulations
+
+### Situation 1
+```{r util}
+# a utility function for moving average smoothing 
+ma <- function(x,n=100){filter(x,rep(1/n,n), sides=2)}
+```
+
+
+```{r simuation1}
+set.seed(12345) 
+n = 10000
+realizations = numeric(n)
+period = 30
+for (i in 1:n) {
+  # annual/discrete growth rate as indepedent i.i.d
+  temp_growth = 1 + rnorm(period, mean=0, sd=0.1)
+  # realization is the cumulative product of those rates 
+  realizations[i] = cumprod(temp_growth)[period]
+}
+```
+
+```{r parameter_estimation1}
+#### estimating the lognormal distribution parameters
+#### and simulate the fitted lognormal distribution via simulating its log
+mu_hat = mean(log(realizations))
+sd_hat = sd(log(realizations))
+## simuating the fitted distribution
+sim_normal = rnorm(10000, mu_hat, sd_hat)
+sim_lognormal = exp(sim_normal)
+```
+
+
+```{r plotting1}
+par(mfrow=c(2, 2))
+
+plot(density(realizations), main="distribution of cumulative product")
+
+plot(density(log(realizations)), main="log distribution of the left")
+
+plot(density(realizations), main="distribution of cumulative product")
+points(density(sim_lognormal), col="blue", cex=0.05)
+
+plot(density(log(realizations)), main="log distribution of the left")
+points(density(sim_normal), col="red", cex=0.05)
+```
+
+
+```{r summary1}
+#### showing summaratic statistics for both
+cat("lognormal(simulated vs fitted)\n")
+summary(realizations)
+summary(sim_lognormal)
+
+cat("\n normal(simulated vs fitted)\n")
+summary(log(realizations))
+summary(sim_normal)
+```
+
+### Situation2
+
+```{r simuation2}
+## a simulation about alternativing growth
+n = 10000
+period1 = 30
+period2 = 100
+growth = function(n) {
+  # model the growth of something
+  # input n, number of data points to be generated 
+  # output an n-vector that simulates the growth percentage
+  # the growth percentage is 50% to be 10%, 50% to be 5%
+  grow_10 = runif(n) > 0.5
+  c(rep(0.1, sum(grow_10)), rep(0.05, sum(!grow_10)))
+}
+
+
+realizations1 = numeric(n)
+realizations2 = numeric(n)
+for (i in 1:n) {
+  # annual/discrete growth rate as indepedent i.i.d
+  temp_growth1 = 1 + growth(period1)
+  temp_growth2 = 1 + growth(period2)
+  # realization is the cumulative product of those rates 
+  realizations1[i] = cumprod(temp_growth1)[period1]
+  realizations2[i] = cumprod(temp_growth2)[period2]
+}
+```
+
+```{r parameter_estimation2}
+#### estimating the lognormal distribution parameters
+#### and simulate the fitted lognormal distribution via simulating its log
+## period 30 
+mu_hat1 = mean(log(realizations1))
+sd_hat1 = sd(log(realizations1))
+sim_normal1 = rnorm(10000, mu_hat1, sd_hat1)
+sim_lognormal1 = exp(sim_normal1)
+
+## period 100
+mu_hat2 = mean(log(realizations2))
+sd_hat2 = sd(log(realizations2))
+sim_normal2 = rnorm(10000, mu_hat2, sd_hat2)
+sim_lognormal2 = exp(sim_normal2)
+```
+
+
+
+```{r plotting2}
+#### ploting the densities 
+par(mfrow=c(2, 2))
+## period 30
+plot(density(realizations1), main="cumulative product, period 30")
+points(density(sim_lognormal1), col="blue", cex=0.05)
+
+plot(density(log(realizations1)), main="log distribution, period 30")
+points(density(sim_normal1), col="blue", cex=0.05)
+
+## period 100
+plot(density(realizations2), main="cumulative product, period 100")
+points(density(sim_lognormal2), col="blue", cex=0.05)
+
+plot(density(log(realizations2)), main="log distribution, period 100")
+points(density(sim_normal2), col="blue", cex=0.05)
+```
+
+
+```{r summary2}
+#### showing summaratic statistics for both
+cat("\nperiod 30(simulated vs fitted)\n")
+summary(realizations1)
+summary(sim_lognormal1)
+cat("\n period 100(simulated vs fitted)\n")
+summary(realizations2)
+summary(sim_lognormal2)
+```
+
+
+## Housing Price 
+
+```{r data_prep, include=FALSE}
+load("SFHousing.rda")
+
+housing <- housing %>% 
+  mutate(year.sold = year(wk), 
+         month.sold = month(wk),
+         #extracting the year and the month into a stand-alone column
+         year.month = (function(x) strtrim(x, 7))(wk),
+         price.log = log(price))
+```
+
+### Fitting raw housing prices with lognormal
+```{r parameters_estimation}
+set.seed(12345)
+mu <- mean(log(housing$price))
+sd.hat <- sd(log(housing$price))
+simnorm <- rnorm(280000, mu, sd.hat)
+```
+
+```{r plot1}
+par(mfrow=c(1,2))
+
+plot(density(housing$price), main="fitting housing price")
+points(density(exp(simnorm)), col="blue", cex=0.1)
+
+plot(density(log(housing$price)), main="fitting log housing price")
+points(density(simnorm), col="blue", cex=0.1)
+```
+
+
+```{r housing_summary1}
+summary1 = data.frame(cbind(summary(housing$price), summary(exp(simnorm))))
+colnames(summary1) = c("House price", "Fitted distribution")
+t(summary1)
+```
+
+
+### Fitting trimmed housing prices with lognormal
+```{r trim_and_fit}
+set.seed(12345)
+trimmed.price <- housing$price[housing$price.log >= 11 & housing$price.log <= 15.8]
+
+mu2 <- mean(log(trimmed.price ))
+sd.hat2 <- sd(log(trimmed.price))
+simnorm2 <- rnorm(280000, mu2, sd.hat2)
+```
+
+```{r plot2}
+par(mfrow=c(1,2))
+plot(density(trimmed.price), xlim=c(0,6e6), main="fitting trimmed price")
+points(density(exp(simnorm2)), col="blue", cex=0.1)
+
+plot(density(log(trimmed.price)), main="fitting log trimmed price")
+points(density(simnorm2), col="blue", cex=0.1)
+```
+
+```{r housing_summary2}
+summary2 = data.frame(cbind(summary(trimmed.price), summary(exp(simnorm2))))
+colnames(summary2) = c("Trimmed house_price", "Fitted distribution")
+t(summary2)
+```
+
